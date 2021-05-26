@@ -1,7 +1,32 @@
-use egui::RawInput;
+use std::sync::Arc;
+
+use egui::{ClippedMesh, CtxRef, RawInput};
+use tetra::graphics;
 
 fn tetra_vec2_to_egui_pos2(tetra_vec2: tetra::math::Vec2<f32>) -> egui::Pos2 {
 	egui::pos2(tetra_vec2.x, tetra_vec2.y)
+}
+
+fn egui_pos2_to_tetra_vec2(egui_pos2: egui::Pos2) -> tetra::math::Vec2<f32> {
+	tetra::math::Vec2::new(egui_pos2.x, egui_pos2.y)
+}
+
+fn egui_rect_to_tetra_rectangle(egui_rect: egui::Rect) -> tetra::graphics::Rectangle<i32> {
+	tetra::graphics::Rectangle::new(
+		egui_rect.left() as i32,
+		egui_rect.top() as i32,
+		egui_rect.width() as i32,
+		egui_rect.height() as i32,
+	)
+}
+
+fn egui_color32_to_tetra_color(egui_color: egui::Color32) -> tetra::graphics::Color {
+	tetra::graphics::Color::rgba8(
+		egui_color.r(),
+		egui_color.g(),
+		egui_color.b(),
+		egui_color.a(),
+	)
 }
 
 fn tetra_key_to_egui_key(key: tetra::input::Key) -> Option<egui::Key> {
@@ -83,18 +108,69 @@ fn tetra_mouse_button_to_egui_pointer_button(
 	}
 }
 
+fn egui_mesh_to_tetra_mesh(
+	ctx: &mut tetra::Context,
+	egui_mesh: egui::epaint::Mesh,
+	texture: tetra::graphics::Texture,
+) -> tetra::Result<tetra::graphics::mesh::Mesh> {
+	let index_buffer = tetra::graphics::mesh::IndexBuffer::new(ctx, &egui_mesh.indices)?;
+	let vertices: Vec<tetra::graphics::mesh::Vertex> = egui_mesh
+		.vertices
+		.iter()
+		.map(|vertex| {
+			tetra::graphics::mesh::Vertex::new(
+				egui_pos2_to_tetra_vec2(vertex.pos),
+				egui_pos2_to_tetra_vec2(vertex.uv),
+				egui_color32_to_tetra_color(vertex.color),
+			)
+		})
+		.collect();
+	let vertex_buffer = tetra::graphics::mesh::VertexBuffer::new(ctx, &vertices)?;
+	let mut mesh = tetra::graphics::mesh::Mesh::indexed(vertex_buffer, index_buffer);
+	mesh.set_texture(texture);
+	mesh.set_backface_culling(false);
+	Ok(mesh)
+}
+
+fn egui_texture_to_tetra_texture(
+	ctx: &mut tetra::Context,
+	egui_texture: Arc<egui::Texture>,
+) -> tetra::Result<tetra::graphics::Texture> {
+	let mut pixels = vec![];
+	for alpha in &egui_texture.pixels {
+		pixels.push(255);
+		pixels.push(255);
+		pixels.push(255);
+		pixels.push(*alpha);
+	}
+	tetra::graphics::Texture::from_rgba(
+		ctx,
+		egui_texture.width as i32,
+		egui_texture.height as i32,
+		&pixels,
+	)
+}
+
 pub struct EguiWrapper {
 	raw_input: RawInput,
+	ctx: CtxRef,
+	texture: Option<tetra::graphics::Texture>,
 }
 
 impl EguiWrapper {
 	pub fn new() -> Self {
 		Self {
 			raw_input: RawInput::default(),
+			ctx: CtxRef::default(),
+			texture: None,
 		}
 	}
 
-	pub fn event(&mut self, ctx: &tetra::Context, event: tetra::Event) {
+	pub fn ctx(&self) -> &egui::CtxRef {
+		&self.ctx
+	}
+
+	pub fn event(&mut self, ctx: &tetra::Context, event: &tetra::Event) {
 		match event {
 			tetra::Event::KeyPressed { key } => {
 				match key {
@@ -110,7 +186,7 @@ impl EguiWrapper {
 					}
 					_ => {}
 				}
-				if let Some(key) = tetra_key_to_egui_key(key) {
+				if let Some(key) = tetra_key_to_egui_key(*key) {
 					self.raw_input.events.push(egui::Event::Key {
 						key,
 						pressed: true,
@@ -132,7 +208,7 @@ impl EguiWrapper {
 					}
 					_ => {}
 				}
-				if let Some(key) = tetra_key_to_egui_key(key) {
+				if let Some(key) = tetra_key_to_egui_key(*key) {
 					self.raw_input.events.push(egui::Event::Key {
 						key,
 						pressed: false,
@@ -141,7 +217,7 @@ impl EguiWrapper {
 				}
 			}
 			tetra::Event::MouseButtonPressed { button } => {
-				if let Some(button) = tetra_mouse_button_to_egui_pointer_button(button) {
+				if let Some(button) = tetra_mouse_button_to_egui_pointer_button(*button) {
 					self.raw_input.events.push(egui::Event::PointerButton {
 						pos: tetra_vec2_to_egui_pos2(tetra::input::get_mouse_position(ctx)),
 						button,
@@ -151,7 +227,7 @@ impl EguiWrapper {
 				}
 			}
 			tetra::Event::MouseButtonReleased { button } => {
-				if let Some(button) = tetra_mouse_button_to_egui_pointer_button(button) {
+				if let Some(button) = tetra_mouse_button_to_egui_pointer_button(*button) {
 					self.raw_input.events.push(egui::Event::PointerButton {
 						pos: tetra_vec2_to_egui_pos2(tetra::input::get_mouse_position(ctx)),
 						button,
@@ -163,15 +239,39 @@ impl EguiWrapper {
 			tetra::Event::MouseMoved { position, .. } => {
 				self.raw_input
 					.events
-					.push(egui::Event::PointerMoved(tetra_vec2_to_egui_pos2(position)));
+					.push(egui::Event::PointerMoved(tetra_vec2_to_egui_pos2(
+						*position,
+					)));
 			}
 			tetra::Event::MouseWheelMoved { amount } => {
 				self.raw_input.scroll_delta = egui::vec2(amount.x as f32, amount.y as f32);
 			}
 			tetra::Event::TextInput { text } => {
-				self.raw_input.events.push(egui::Event::Text(text));
+				self.raw_input.events.push(egui::Event::Text(text.clone()));
 			}
 			_ => {}
 		}
+	}
+
+	pub fn begin_frame(&mut self, ctx: &mut tetra::Context) -> tetra::Result<()> {
+		self.ctx.begin_frame(self.raw_input.take());
+		if self.texture.is_none() {
+			self.texture = Some(egui_texture_to_tetra_texture(ctx, self.ctx.texture())?);
+		}
+		Ok(())
+	}
+
+	pub fn end_frame(&mut self, ctx: &mut tetra::Context) -> tetra::Result<()> {
+		if let Some(texture) = &self.texture {
+			let (_, shapes) = self.ctx.end_frame();
+			let clipped_meshes = self.ctx.tessellate(shapes);
+			for ClippedMesh(rect, mesh) in clipped_meshes {
+				graphics::set_scissor(ctx, egui_rect_to_tetra_rectangle(rect));
+				let mesh = egui_mesh_to_tetra_mesh(ctx, mesh, texture.clone())?;
+				mesh.draw(ctx, tetra::math::Vec2::zero());
+			}
+			graphics::reset_scissor(ctx);
+		}
+		Ok(())
 	}
 }
