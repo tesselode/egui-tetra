@@ -1,7 +1,10 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use egui::{ClippedMesh, CtxRef, RawInput};
-use tetra::graphics::{self, BlendAlphaMode, BlendMode};
+use tetra::{
+	graphics::{self, BlendAlphaMode, BlendMode},
+	time::Timestep,
+};
 
 fn tetra_vec2_to_egui_pos2(tetra_vec2: tetra::math::Vec2<f32>) -> egui::Pos2 {
 	egui::pos2(tetra_vec2.x, tetra_vec2.y)
@@ -155,6 +158,7 @@ pub struct EguiWrapper {
 	raw_input: RawInput,
 	ctx: CtxRef,
 	texture: Option<tetra::graphics::Texture>,
+	last_frame_time: Instant,
 }
 
 impl EguiWrapper {
@@ -163,6 +167,7 @@ impl EguiWrapper {
 			raw_input: RawInput::default(),
 			ctx: CtxRef::default(),
 			texture: None,
+			last_frame_time: Instant::now(),
 		}
 	}
 
@@ -254,6 +259,9 @@ impl EguiWrapper {
 	}
 
 	pub fn begin_frame(&mut self, ctx: &mut tetra::Context) -> tetra::Result<()> {
+		let now = Instant::now();
+		self.raw_input.predicted_dt = (now - self.last_frame_time).as_secs_f32();
+		self.last_frame_time = now;
 		self.ctx.begin_frame(self.raw_input.take());
 		if self.texture.is_none() {
 			self.texture = Some(egui_texture_to_tetra_texture(ctx, self.ctx.texture())?);
