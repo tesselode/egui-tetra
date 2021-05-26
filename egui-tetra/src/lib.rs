@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use egui::{ClippedMesh, CtxRef, RawInput};
-use tetra::graphics;
+use tetra::graphics::{self, BlendAlphaMode, BlendMode};
 
 fn tetra_vec2_to_egui_pos2(tetra_vec2: tetra::math::Vec2<f32>) -> egui::Pos2 {
 	egui::pos2(tetra_vec2.x, tetra_vec2.y)
@@ -138,9 +138,9 @@ fn egui_texture_to_tetra_texture(
 ) -> tetra::Result<tetra::graphics::Texture> {
 	let mut pixels = vec![];
 	for alpha in &egui_texture.pixels {
-		pixels.push(255);
-		pixels.push(255);
-		pixels.push(255);
+		pixels.push(*alpha);
+		pixels.push(*alpha);
+		pixels.push(*alpha);
 		pixels.push(*alpha);
 	}
 	tetra::graphics::Texture::from_rgba(
@@ -263,6 +263,7 @@ impl EguiWrapper {
 
 	pub fn end_frame(&mut self, ctx: &mut tetra::Context) -> tetra::Result<()> {
 		if let Some(texture) = &self.texture {
+			graphics::set_blend_mode(ctx, BlendMode::Alpha(BlendAlphaMode::Premultiplied));
 			let (_, shapes) = self.ctx.end_frame();
 			let clipped_meshes = self.ctx.tessellate(shapes);
 			for ClippedMesh(rect, mesh) in clipped_meshes {
@@ -271,6 +272,7 @@ impl EguiWrapper {
 				mesh.draw(ctx, tetra::math::Vec2::zero());
 			}
 			graphics::reset_scissor(ctx);
+			graphics::reset_blend_mode(ctx);
 		}
 		Ok(())
 	}
