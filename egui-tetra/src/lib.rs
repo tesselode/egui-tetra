@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Instant};
 use egui::{ClippedMesh, CtxRef, RawInput};
 use tetra::{
 	graphics::{self, BlendAlphaMode, BlendMode},
-	time::Timestep,
+	Event, TetraError,
 };
 
 fn tetra_vec2_to_egui_pos2(tetra_vec2: tetra::math::Vec2<f32>) -> egui::Pos2 {
@@ -282,6 +282,80 @@ impl EguiWrapper {
 			graphics::reset_scissor(ctx);
 			graphics::reset_blend_mode(ctx);
 		}
+		Ok(())
+	}
+}
+
+#[allow(unused_variables)]
+pub trait State<E: From<TetraError> = TetraError> {
+	/// Called when it is time for the game to update.
+	fn update(&mut self, ctx: &mut tetra::Context) -> Result<(), E> {
+		Ok(())
+	}
+
+	/// Called when it is time for the game to be drawn.
+	fn draw(&mut self, ctx: &mut tetra::Context, egui_ctx: &egui::CtxRef) -> Result<(), E> {
+		Ok(())
+	}
+
+	/// Called when a window or input event occurs.
+	fn event(&mut self, ctx: &mut tetra::Context, event: Event) -> Result<(), E> {
+		Ok(())
+	}
+}
+
+pub struct StateWrapper<E: From<TetraError>> {
+	state: Box<dyn State<E>>,
+	egui: EguiWrapper,
+}
+
+impl<E: From<TetraError>> StateWrapper<E> {
+	pub fn new(state: impl State<E> + 'static) -> Self {
+		Self {
+			state: Box::new(state),
+			egui: EguiWrapper::new(),
+		}
+	}
+}
+
+impl<E: From<TetraError>> tetra::State<E> for StateWrapper<E> {
+	fn update(&mut self, ctx: &mut tetra::Context) -> Result<(), E> {
+		self.state.update(ctx)
+	}
+
+	fn draw(&mut self, ctx: &mut tetra::Context) -> Result<(), E> {
+		self.egui.begin_frame(ctx)?;
+		self.state.draw(ctx, self.egui.ctx())?;
+		self.egui.end_frame(ctx)?;
+		Ok(())
+	}
+
+	fn event(&mut self, ctx: &mut tetra::Context, event: Event) -> Result<(), E> {
+		self.egui.event(ctx, &event);
+		match &event {
+			Event::KeyPressed { .. } | Event::KeyReleased { .. } => {
+				if self.egui.ctx().wants_keyboard_input() {
+					return Ok(());
+				}
+			}
+			Event::MouseButtonPressed { .. } | Event::MouseButtonReleased { .. } => {
+				if self.egui.ctx().is_using_pointer() {
+					return Ok(());
+				}
+			}
+			Event::MouseMoved { .. } => {
+				if self.egui.ctx().is_using_pointer() {
+					return Ok(());
+				}
+			}
+			Event::MouseWheelMoved { .. } => {
+				if self.egui.ctx().is_using_pointer() {
+					return Ok(());
+				}
+			}
+			_ => {}
+		}
+		self.state.event(ctx, event)?;
 		Ok(())
 	}
 }

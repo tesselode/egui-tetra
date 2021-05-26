@@ -1,34 +1,24 @@
 use std::error::Error;
 
-use egui_tetra::EguiWrapper;
+use egui_tetra::{State, StateWrapper};
 use tetra::{
 	graphics::{self, Color},
-	Context, ContextBuilder, Event, State,
+	ContextBuilder, Event,
 };
 
-struct MainState {
-	egui_wrapper: EguiWrapper,
-}
-
-impl MainState {
-	pub fn new() -> Self {
-		Self {
-			egui_wrapper: EguiWrapper::new(),
-		}
-	}
-}
+struct MainState;
 
 impl State<Box<dyn Error>> for MainState {
-	fn update(&mut self, ctx: &mut Context) -> Result<(), Box<dyn Error>> {
-		Ok(())
-	}
-
-	fn draw(&mut self, ctx: &mut Context) -> Result<(), Box<dyn Error>> {
+	fn draw(
+		&mut self,
+		ctx: &mut tetra::Context,
+		egui_ctx: &egui::CtxRef,
+	) -> Result<(), Box<dyn Error>> {
 		graphics::clear(ctx, Color::BLACK);
-		self.egui_wrapper.begin_frame(ctx)?;
-		egui::CentralPanel::default().show(self.egui_wrapper.ctx(), |ui| {
+		egui::CentralPanel::default().show(egui_ctx, |ui| {
 			ui.label("This is a label");
 			ui.hyperlink("https://github.com/emilk/egui");
+			ui.text_edit_singleline(&mut "".into());
 			if ui.button("Click me").clicked() {}
 			ui.add(egui::Slider::new(&mut 0.0, 0.0..=100.0));
 			ui.add(egui::DragValue::new(&mut 0.0));
@@ -54,12 +44,13 @@ impl State<Box<dyn Error>> for MainState {
 				ui.label("Not much, as it turns out");
 			});
 		});
-		self.egui_wrapper.end_frame(ctx)?;
 		Ok(())
 	}
 
-	fn event(&mut self, ctx: &mut Context, event: Event) -> Result<(), Box<dyn Error>> {
-		self.egui_wrapper.event(ctx, &event);
+	fn event(&mut self, _ctx: &mut tetra::Context, event: Event) -> Result<(), Box<dyn Error>> {
+		if let Event::KeyPressed { key } = event {
+			println!("{:?}", key);
+		}
 		Ok(())
 	}
 }
@@ -67,8 +58,6 @@ impl State<Box<dyn Error>> for MainState {
 fn main() -> Result<(), Box<dyn Error>> {
 	ContextBuilder::new("egui-tetra-test", 800, 600)
 		.show_mouse(true)
-		.multisampling(8)
-		.vsync(false)
 		.build()?
-		.run(|_| Ok(MainState::new()))
+		.run(|_| Ok(StateWrapper::new(MainState)))
 }
