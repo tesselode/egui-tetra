@@ -316,6 +316,10 @@ impl<E: From<TetraError>> StateWrapper<E> {
 			egui: EguiWrapper::new(),
 		}
 	}
+
+	pub fn ctx(&self) -> &egui::CtxRef {
+		self.egui.ctx()
+	}
 }
 
 impl<E: From<TetraError>> tetra::State<E> for StateWrapper<E> {
