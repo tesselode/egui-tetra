@@ -32,6 +32,12 @@ fn egui_color32_to_tetra_color(egui_color: egui::Color32) -> tetra::graphics::Co
 	)
 }
 
+/// Converts a [tetra key](tetra::input::Key) to an
+/// [egui key](egui::Key) if there's an egui equivalent
+/// to the tetra key, otherwise returns `None`.
+///
+/// egui doesn't care about every keyboard key, so its listing of keys
+/// is less comprehensive than tetra's.
 fn tetra_key_to_egui_key(key: tetra::input::Key) -> Option<egui::Key> {
 	match key {
 		tetra::input::Key::A => Some(egui::Key::A),
@@ -100,6 +106,11 @@ fn tetra_key_to_egui_key(key: tetra::input::Key) -> Option<egui::Key> {
 	}
 }
 
+/// Converts a [tetra mouse button](tetra::input::MouseButton) to an
+/// [egui mouse button](egui::PointerButton) if there's an egui equivalent
+/// to the tetra mouse button, otherwise returns `None`.
+///
+/// egui only supports left, middle, and right buttons.
 fn tetra_mouse_button_to_egui_pointer_button(
 	tetra_mouse_button: tetra::input::MouseButton,
 ) -> Option<egui::PointerButton> {
@@ -135,11 +146,17 @@ fn egui_mesh_to_tetra_mesh(
 	Ok(mesh)
 }
 
+/// Converts an [egui font texture](egui::Texture) to a
+/// [tetra texture](tetra::graphics::Texture).
 fn egui_texture_to_tetra_texture(
 	ctx: &mut tetra::Context,
 	egui_texture: Arc<egui::Texture>,
 ) -> tetra::Result<tetra::graphics::Texture> {
 	let mut pixels = vec![];
+	// each u8 of the egui texture is the alpha channel.
+	// the other components are always white. since egui
+	// uses premultiplied alpha, we set every component in the
+	// tetra texture to the alpha.
 	for alpha in &egui_texture.pixels {
 		pixels.push(*alpha);
 		pixels.push(*alpha);
@@ -154,6 +171,8 @@ fn egui_texture_to_tetra_texture(
 	)
 }
 
+/// Wraps an egui context with features that are useful
+/// for integrating egui with tetra.
 pub struct EguiWrapper {
 	raw_input: RawInput,
 	ctx: CtxRef,
@@ -162,6 +181,7 @@ pub struct EguiWrapper {
 }
 
 impl EguiWrapper {
+	/// Creates a new [`EguiWrapper`] and underlying egui context.
 	pub fn new() -> Self {
 		Self {
 			raw_input: RawInput::default(),
@@ -171,10 +191,12 @@ impl EguiWrapper {
 		}
 	}
 
+	/// Returns a reference to the underlying egui context.
 	pub fn ctx(&self) -> &egui::CtxRef {
 		&self.ctx
 	}
 
+	/// Takes a tetra event and updates the egui context as needed.
 	pub fn event(&mut self, ctx: &tetra::Context, event: &tetra::Event) {
 		match event {
 			tetra::Event::KeyPressed { key } => {
@@ -258,6 +280,7 @@ impl EguiWrapper {
 		}
 	}
 
+	/// Begins a new GUI frame.
 	pub fn begin_frame(&mut self, ctx: &mut tetra::Context) -> tetra::Result<()> {
 		let now = Instant::now();
 		self.raw_input.predicted_dt = (now - self.last_frame_time).as_secs_f32();
@@ -269,6 +292,10 @@ impl EguiWrapper {
 		Ok(())
 	}
 
+	/// Ends a GUI frame, drawing the result to the screen.
+	///
+	/// Note that this function changes the tetra blend mode and
+	/// scissor state.
 	pub fn end_frame(&self, ctx: &mut tetra::Context) -> tetra::Result<()> {
 		if let Some(texture) = &self.texture {
 			graphics::set_blend_mode(ctx, BlendMode::Alpha(BlendAlphaMode::Premultiplied));
@@ -286,6 +313,12 @@ impl EguiWrapper {
 	}
 }
 
+/// A trait analogous to [`tetra::State`], but with the addition of an
+/// `egui_ctx` argument in the [`draw`](State::draw) function.
+///
+/// You can use a type implementing this trait as your main game
+/// state by wrapping it with a [`StateWrapper`] and passing the wrapper
+/// to [`tetra::Context::run`].
 #[allow(unused_variables)]
 pub trait State<E: From<TetraError> = TetraError> {
 	/// Called when it is time for the game to update.
@@ -299,17 +332,23 @@ pub trait State<E: From<TetraError> = TetraError> {
 	}
 
 	/// Called when a window or input event occurs.
+	///
+	/// Mouse and keyboard input events will not be received if the GUI
+	/// is using the mouse or keyboard, respectively.
 	fn event(&mut self, ctx: &mut tetra::Context, event: Event) -> Result<(), E> {
 		Ok(())
 	}
 }
 
+/// An adaptor that implements [`tetra::State`] for implementors of
+/// [`State`].
 pub struct StateWrapper<E: From<TetraError>> {
 	state: Box<dyn State<E>>,
 	egui: EguiWrapper,
 }
 
 impl<E: From<TetraError>> StateWrapper<E> {
+	/// Wraps an implementor of [`State`] so it implements [`tetra::State`].
 	pub fn new(state: impl State<E> + 'static) -> Self {
 		Self {
 			state: Box::new(state),
@@ -317,6 +356,7 @@ impl<E: From<TetraError>> StateWrapper<E> {
 		}
 	}
 
+	/// Returns a reference to this wrapper's egui context.
 	pub fn ctx(&self) -> &egui::CtxRef {
 		self.egui.ctx()
 	}
