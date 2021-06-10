@@ -269,7 +269,7 @@ impl EguiWrapper {
 		Ok(())
 	}
 
-	pub fn end_frame(&mut self, ctx: &mut tetra::Context) -> tetra::Result<()> {
+	pub fn end_frame(&self, ctx: &mut tetra::Context) -> tetra::Result<()> {
 		if let Some(texture) = &self.texture {
 			graphics::set_blend_mode(ctx, BlendMode::Alpha(BlendAlphaMode::Premultiplied));
 			let (_, shapes) = self.ctx.end_frame();
