@@ -8,3 +8,4 @@ edition = "2018"
 [dependencies]
 egui = "0.12.0"
 tetra = { version = "0.6.4", default-features = false }
+open = "1.7.0"

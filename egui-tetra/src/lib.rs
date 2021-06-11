@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Instant};
+use std::{fmt::Display, process::ExitStatus, sync::Arc, time::Instant};
 
 use egui::{ClippedMesh, CtxRef, RawInput};
 use tetra::{
@@ -171,6 +171,78 @@ fn egui_texture_to_tetra_texture(
 	)
 }
 
+#[derive(Debug)]
+pub enum OpenUrlError {
+	IoError(std::io::Error),
+	ProcessError(ExitStatus),
+}
+
+impl Display for OpenUrlError {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			OpenUrlError::IoError(error) => error.fmt(f),
+			OpenUrlError::ProcessError(status) => status.fmt(f),
+		}
+	}
+}
+
+impl std::error::Error for OpenUrlError {
+	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+		match self {
+			OpenUrlError::IoError(error) => Some(error),
+			OpenUrlError::ProcessError(_) => None,
+		}
+	}
+}
+
+impl From<std::io::Error> for OpenUrlError {
+	fn from(error: std::io::Error) -> Self {
+		Self::IoError(error)
+	}
+}
+
+impl From<ExitStatus> for OpenUrlError {
+	fn from(status: ExitStatus) -> Self {
+		Self::ProcessError(status)
+	}
+}
+
+#[derive(Debug)]
+pub enum Error {
+	TetraError(TetraError),
+	OpenUrlError(OpenUrlError),
+}
+
+impl Display for Error {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Error::TetraError(error) => error.fmt(f),
+			Error::OpenUrlError(error) => error.fmt(f),
+		}
+	}
+}
+
+impl std::error::Error for Error {
+	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+		match self {
+			Error::TetraError(error) => Some(error),
+			Error::OpenUrlError(error) => Some(error),
+		}
+	}
+}
+
+impl From<TetraError> for Error {
+	fn from(error: TetraError) -> Self {
+		Self::TetraError(error)
+	}
+}
+
+impl From<OpenUrlError> for Error {
+	fn from(error: OpenUrlError) -> Self {
+		Self::OpenUrlError(error)
+	}
+}
+
 /// Wraps an egui context with features that are useful
 /// for integrating egui with tetra.
 pub struct EguiWrapper {
@@ -281,7 +353,7 @@ impl EguiWrapper {
 	}
 
 	/// Begins a new GUI frame.
-	pub fn begin_frame(&mut self, ctx: &mut tetra::Context) -> tetra::Result<()> {
+	pub fn begin_frame(&mut self, ctx: &mut tetra::Context) -> Result<(), Error> {
 		let now = Instant::now();
 		self.raw_input.predicted_dt = (now - self.last_frame_time).as_secs_f32();
 		self.last_frame_time = now;
@@ -296,10 +368,10 @@ impl EguiWrapper {
 	///
 	/// Note that this function changes the tetra blend mode and
 	/// scissor state.
-	pub fn end_frame(&self, ctx: &mut tetra::Context) -> tetra::Result<()> {
+	pub fn end_frame(&self, ctx: &mut tetra::Context) -> Result<(), Error> {
 		if let Some(texture) = &self.texture {
 			graphics::set_blend_mode(ctx, BlendMode::Alpha(BlendAlphaMode::Premultiplied));
-			let (_, shapes) = self.ctx.end_frame();
+			let (output, shapes) = self.ctx.end_frame();
 			let clipped_meshes = self.ctx.tessellate(shapes);
 			for ClippedMesh(rect, mesh) in clipped_meshes {
 				graphics::set_scissor(ctx, egui_rect_to_tetra_rectangle(rect));
@@ -308,6 +380,13 @@ impl EguiWrapper {
 			}
 			graphics::reset_scissor(ctx);
 			graphics::reset_blend_mode(ctx);
+			if let Some(open_url) = &output.open_url {
+				let status =
+					open::that(&open_url.url).map_err(|error| OpenUrlError::IoError(error))?;
+				if !status.success() {
+					return Err(Error::OpenUrlError(OpenUrlError::ProcessError(status)));
+				}
+			}
 		}
 		Ok(())
 	}
@@ -320,7 +399,7 @@ impl EguiWrapper {
 /// state by wrapping it with a [`StateWrapper`] and passing the wrapper
 /// to [`tetra::Context::run`].
 #[allow(unused_variables)]
-pub trait State<E: From<TetraError> = TetraError> {
+pub trait State<E: From<Error> = Error> {
 	/// Called when it is time for the game to update.
 	fn update(&mut self, ctx: &mut tetra::Context) -> Result<(), E> {
 		Ok(())
@@ -342,12 +421,12 @@ pub trait State<E: From<TetraError> = TetraError> {
 
 /// An adaptor that implements [`tetra::State`] for implementors of
 /// [`State`].
-pub struct StateWrapper<E: From<TetraError>> {
+pub struct StateWrapper<E: From<Error>> {
 	state: Box<dyn State<E>>,
 	egui: EguiWrapper,
 }
 
-impl<E: From<TetraError>> StateWrapper<E> {
+impl<E: From<Error>> StateWrapper<E> {
 	/// Wraps an implementor of [`State`] so it implements [`tetra::State`].
 	pub fn new(state: impl State<E> + 'static) -> Self {
 		Self {
@@ -362,7 +441,7 @@ impl<E: From<TetraError>> StateWrapper<E> {
 	}
 }
 
-impl<E: From<TetraError>> tetra::State<E> for StateWrapper<E> {
+impl<E: From<Error>> tetra::State<E> for StateWrapper<E> {
 	fn update(&mut self, ctx: &mut tetra::Context) -> Result<(), E> {
 		self.state.update(ctx)
 	}
