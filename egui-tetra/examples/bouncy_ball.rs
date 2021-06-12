@@ -77,7 +77,7 @@ impl State<Box<dyn Error>> for MainState {
 
 	fn ui(
 		&mut self,
-		ctx: &mut tetra::Context,
+		_ctx: &mut tetra::Context,
 		egui_ctx: &egui::CtxRef,
 	) -> Result<(), Box<dyn Error>> {
 		egui::Window::new("Bouncy Ball").show(egui_ctx, |ui| {
@@ -126,8 +126,5 @@ fn main() -> Result<(), Box<dyn Error>> {
 	tetra::ContextBuilder::new("Bouncy ball example", SCREEN_WIDTH, SCREEN_HEIGHT)
 		.show_mouse(true)
 		.build()?
-		.run(|ctx| {
-			let state = MainState::new(ctx)?;
-			StateWrapper::new(ctx, state)
-		})
+		.run(|ctx| Ok(StateWrapper::new(MainState::new(ctx)?)))
 }

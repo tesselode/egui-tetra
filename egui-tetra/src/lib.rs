@@ -4,7 +4,7 @@ use copypasta::{ClipboardContext, ClipboardProvider};
 use egui::{epaint::ClippedShape, ClippedMesh, CtxRef, RawInput};
 use tetra::{
 	graphics::{self, BlendAlphaMode, BlendMode},
-	Context, Event, TetraError,
+	Event, TetraError,
 };
 
 fn tetra_vec2_to_egui_pos2(tetra_vec2: tetra::math::Vec2<f32>) -> egui::Pos2 {
@@ -280,7 +280,7 @@ impl EguiWrapper {
 		&self.ctx
 	}
 
-	/// Takes a tetra event and updates the egui context as needed.
+	/// Dispaches a tetra event to the egui context.
 	pub fn event(&mut self, ctx: &tetra::Context, event: &tetra::Event) -> Result<(), Error> {
 		match event {
 			tetra::Event::KeyPressed { key } => {
@@ -396,10 +396,7 @@ impl EguiWrapper {
 		Ok(())
 	}
 
-	/// Ends a GUI frame, drawing the result to the screen.
-	///
-	/// Note that this function changes the tetra blend mode and
-	/// scissor state.
+	/// Ends a GUI frame.
 	pub fn end_frame(&mut self) -> Result<(), Error> {
 		let (output, shapes) = self.ctx.end_frame();
 		self.shapes = Some(shapes);
@@ -420,6 +417,10 @@ impl EguiWrapper {
 		Ok(())
 	}
 
+	/// Draws the latest finished GUI frame to the screen.
+	///
+	/// Note that this function changes the tetra blend mode and
+	/// scissor state.
 	pub fn draw_frame(&mut self, ctx: &mut tetra::Context) -> Result<(), Error> {
 		if let (Some(texture), Some(shapes)) = (&self.texture, self.shapes.take()) {
 			graphics::set_blend_mode(ctx, BlendMode::Alpha(BlendAlphaMode::Premultiplied));
@@ -436,14 +437,19 @@ impl EguiWrapper {
 	}
 }
 
-/// A trait analogous to [`tetra::State`], but with the addition of an
-/// `egui_ctx` argument in the [`draw`](State::draw) function.
+/// A trait analogous to [`tetra::State`], but with the addition of a
+/// [`ui`](State::ui) callback and an `egui_ctx` argument in the
+/// [`draw`](State::draw) function.
 ///
 /// You can use a type implementing this trait as your main game
 /// state by wrapping it with a [`StateWrapper`] and passing the wrapper
 /// to [`tetra::Context::run`].
 #[allow(unused_variables)]
 pub trait State<E: From<Error> = Error> {
+	/// Called when it is time for the game to construct a GUI.
+	///
+	/// This is called at the beginning of the game loop, but
+	/// the GUI is not drawn until the end of the game loop.
 	fn ui(&mut self, ctx: &mut tetra::Context, egui_ctx: &egui::CtxRef) -> Result<(), E> {
 		Ok(())
 	}
@@ -470,21 +476,19 @@ pub trait State<E: From<Error> = Error> {
 /// An adaptor that implements [`tetra::State`] for implementors of
 /// [`State`].
 pub struct StateWrapper<E: From<Error>> {
+	events: Vec<tetra::Event>,
 	state: Box<dyn State<E>>,
 	egui: EguiWrapper,
 }
 
 impl<E: From<Error>> StateWrapper<E> {
 	/// Wraps an implementor of [`State`] so it implements [`tetra::State`].
-	pub fn new(ctx: &mut Context, mut state: impl State<E> + 'static) -> Result<Self, E> {
-		let mut egui = EguiWrapper::new();
-		egui.begin_frame(ctx)?;
-		state.ui(ctx, egui.ctx())?;
-		egui.end_frame()?;
-		Ok(Self {
+	pub fn new(state: impl State<E> + 'static) -> Self {
+		Self {
+			events: vec![],
 			state: Box::new(state),
-			egui,
-		})
+			egui: EguiWrapper::new(),
+		}
 	}
 
 	/// Returns a reference to this wrapper's egui context.
@@ -495,44 +499,49 @@ impl<E: From<Error>> StateWrapper<E> {
 
 impl<E: From<Error>> tetra::State<E> for StateWrapper<E> {
 	fn update(&mut self, ctx: &mut tetra::Context) -> Result<(), E> {
+		self.egui.begin_frame(ctx)?;
+		self.state.ui(ctx, self.egui.ctx())?;
+		self.egui.end_frame()?;
+
+		for event in self.events.drain(..) {
+			match &event {
+				Event::KeyPressed { .. } | Event::KeyReleased { .. } => {
+					if self.egui.ctx().wants_keyboard_input() {
+						continue;
+					}
+				}
+				Event::MouseButtonPressed { .. } | Event::MouseButtonReleased { .. } => {
+					if self.egui.ctx().is_using_pointer() {
+						continue;
+					}
+				}
+				Event::MouseMoved { .. } => {
+					if self.egui.ctx().is_using_pointer() {
+						continue;
+					}
+				}
+				Event::MouseWheelMoved { .. } => {
+					if self.egui.ctx().is_using_pointer() {
+						continue;
+					}
+				}
+				_ => {}
+			}
+			self.state.event(ctx, event)?;
+		}
+
 		self.state.update(ctx)
 	}
 
 	fn draw(&mut self, ctx: &mut tetra::Context) -> Result<(), E> {
 		self.state.draw(ctx, self.egui.ctx())?;
 		self.egui.draw_frame(ctx)?;
-		self.egui.begin_frame(ctx)?;
-		self.state.ui(ctx, self.egui.ctx())?;
-		self.egui.end_frame()?;
 		Ok(())
 	}
 
 	fn event(&mut self, ctx: &mut tetra::Context, event: Event) -> Result<(), E> {
 		self.egui.event(ctx, &event)?;
-		match &event {
-			Event::KeyPressed { .. } | Event::KeyReleased { .. } => {
-				if self.egui.ctx().wants_keyboard_input() {
-					return Ok(());
-				}
-			}
-			Event::MouseButtonPressed { .. } | Event::MouseButtonReleased { .. } => {
-				if self.egui.ctx().is_using_pointer() {
-					return Ok(());
-				}
-			}
-			Event::MouseMoved { .. } => {
-				if self.egui.ctx().is_using_pointer() {
-					return Ok(());
-				}
-			}
-			Event::MouseWheelMoved { .. } => {
-				if self.egui.ctx().is_using_pointer() {
-					return Ok(());
-				}
-			}
-			_ => {}
-		}
-		self.state.event(ctx, event)?;
+		self.events.push(event);
 		Ok(())
 	}
 }

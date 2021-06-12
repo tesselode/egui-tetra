@@ -69,5 +69,5 @@ fn main() -> Result<(), Box<dyn Error>> {
 	ContextBuilder::new("egui-tetra-test", 800, 600)
 		.show_mouse(true)
 		.build()?
-		.run(|ctx| StateWrapper::new(ctx, MainState::new()))
+		.run(|_| Ok(StateWrapper::new(MainState::new())))
 }
