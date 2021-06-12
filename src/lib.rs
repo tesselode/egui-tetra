@@ -294,38 +294,38 @@ fn egui_texture_to_tetra_texture(
 /// An error that can occur when opening a URL or other path
 /// by clicking a hyperlink.
 #[derive(Debug)]
-pub enum OpenUrlError {
+pub enum OpenError {
 	/// An error occurred when interacting with the filesystem.
 	IoError(std::io::Error),
 	/// The program that opened the link finished unsuccessfully.
 	ProcessError(ExitStatus),
 }
 
-impl Display for OpenUrlError {
+impl Display for OpenError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			OpenUrlError::IoError(error) => error.fmt(f),
-			OpenUrlError::ProcessError(status) => status.fmt(f),
+			OpenError::IoError(error) => error.fmt(f),
+			OpenError::ProcessError(status) => status.fmt(f),
 		}
 	}
 }
 
-impl std::error::Error for OpenUrlError {
+impl std::error::Error for OpenError {
 	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
 		match self {
-			OpenUrlError::IoError(error) => Some(error),
-			OpenUrlError::ProcessError(_) => None,
+			OpenError::IoError(error) => Some(error),
+			OpenError::ProcessError(_) => None,
 		}
 	}
 }
 
-impl From<std::io::Error> for OpenUrlError {
+impl From<std::io::Error> for OpenError {
 	fn from(error: std::io::Error) -> Self {
 		Self::IoError(error)
 	}
 }
 
-impl From<ExitStatus> for OpenUrlError {
+impl From<ExitStatus> for OpenError {
 	fn from(status: ExitStatus) -> Self {
 		Self::ProcessError(status)
 	}
@@ -338,7 +338,7 @@ pub enum Error {
 	TetraError(TetraError),
 	/// An error occurred when opening a URL or other path
 	/// by clicking a hyperlink.
-	OpenUrlError(OpenUrlError),
+	OpenError(OpenError),
 	/// An error occurred when accessing the system's clipboard.
 	ClipboardError(Box<dyn std::error::Error>),
 }
@@ -347,7 +347,7 @@ impl Display for Error {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Error::TetraError(error) => error.fmt(f),
-			Error::OpenUrlError(error) => error.fmt(f),
+			Error::OpenError(error) => error.fmt(f),
 			Error::ClipboardError(error) => error.fmt(f),
 		}
 	}
@@ -357,7 +357,7 @@ impl std::error::Error for Error {
 	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
 		match self {
 			Error::TetraError(error) => Some(error),
-			Error::OpenUrlError(error) => Some(error),
+			Error::OpenError(error) => Some(error),
 			Error::ClipboardError(error) => Some(error.as_ref()),
 		}
 	}
@@ -369,9 +369,9 @@ impl From<TetraError> for Error {
 	}
 }
 
-impl From<OpenUrlError> for Error {
-	fn from(error: OpenUrlError) -> Self {
-		Self::OpenUrlError(error)
+impl From<OpenError> for Error {
+	fn from(error: OpenError) -> Self {
+		Self::OpenError(error)
 	}
 }
 
@@ -531,9 +531,9 @@ impl EguiWrapper {
 
 		// open URLs that were clicked
 		if let Some(open_url) = &output.open_url {
-			let status = open::that(&open_url.url).map_err(|error| OpenUrlError::IoError(error))?;
+			let status = open::that(&open_url.url).map_err(|error| OpenError::IoError(error))?;
 			if !status.success() {
-				return Err(Error::OpenUrlError(OpenUrlError::ProcessError(status)));
+				return Err(Error::OpenError(OpenError::ProcessError(status)));
 			}
 		}
 
