@@ -1,5 +1,6 @@
 use std::{fmt::Display, process::ExitStatus, sync::Arc, time::Instant};
 
+use copypasta::{ClipboardContext, ClipboardProvider};
 use egui::{ClippedMesh, CtxRef, RawInput};
 use tetra::{
 	graphics::{self, BlendAlphaMode, BlendMode},
@@ -211,6 +212,7 @@ impl From<ExitStatus> for OpenUrlError {
 pub enum Error {
 	TetraError(TetraError),
 	OpenUrlError(OpenUrlError),
+	ClipboardError(Box<dyn std::error::Error>),
 }
 
 impl Display for Error {
@@ -218,6 +220,7 @@ impl Display for Error {
 		match self {
 			Error::TetraError(error) => error.fmt(f),
 			Error::OpenUrlError(error) => error.fmt(f),
+			Error::ClipboardError(error) => error.fmt(f),
 		}
 	}
 }
@@ -227,6 +230,7 @@ impl std::error::Error for Error {
 		match self {
 			Error::TetraError(error) => Some(error),
 			Error::OpenUrlError(error) => Some(error),
+			Error::ClipboardError(error) => Some(error.as_ref()),
 		}
 	}
 }
@@ -240,6 +244,12 @@ impl From<TetraError> for Error {
 impl From<OpenUrlError> for Error {
 	fn from(error: OpenUrlError) -> Self {
 		Self::OpenUrlError(error)
+	}
+}
+
+impl From<Box<dyn std::error::Error + Send + Sync>> for Error {
+	fn from(error: Box<dyn std::error::Error + Send + Sync>) -> Self {
+		Self::ClipboardError(error)
 	}
 }
 
@@ -269,9 +279,10 @@ impl EguiWrapper {
 	}
 
 	/// Takes a tetra event and updates the egui context as needed.
-	pub fn event(&mut self, ctx: &tetra::Context, event: &tetra::Event) {
+	pub fn event(&mut self, ctx: &tetra::Context, event: &tetra::Event) -> Result<(), Error> {
 		match event {
 			tetra::Event::KeyPressed { key } => {
+				// update modifiers
 				match key {
 					tetra::input::Key::LeftCtrl | tetra::input::Key::RightCtrl => {
 						self.raw_input.modifiers.ctrl = true;
@@ -285,6 +296,24 @@ impl EguiWrapper {
 					}
 					_ => {}
 				}
+
+				// copy/cut/paste
+				if tetra::input::is_key_down(ctx, tetra::input::Key::LeftCtrl)
+					| tetra::input::is_key_down(ctx, tetra::input::Key::RightCtrl)
+				{
+					if let tetra::input::Key::C = key {
+						self.raw_input.events.push(egui::Event::Copy);
+					}
+					if let tetra::input::Key::X = key {
+						self.raw_input.events.push(egui::Event::Cut);
+					}
+					if let tetra::input::Key::V = key {
+						self.raw_input
+							.events
+							.push(egui::Event::Text(ClipboardContext::new()?.get_contents()?));
+					}
+				}
+
 				if let Some(key) = tetra_key_to_egui_key(*key) {
 					self.raw_input.events.push(egui::Event::Key {
 						key,
@@ -350,6 +379,7 @@ impl EguiWrapper {
 			}
 			_ => {}
 		}
+		Ok(())
 	}
 
 	/// Begins a new GUI frame.
@@ -369,9 +399,11 @@ impl EguiWrapper {
 	/// Note that this function changes the tetra blend mode and
 	/// scissor state.
 	pub fn end_frame(&self, ctx: &mut tetra::Context) -> Result<(), Error> {
+		let (output, shapes) = self.ctx.end_frame();
+
+		// draw meshes
 		if let Some(texture) = &self.texture {
 			graphics::set_blend_mode(ctx, BlendMode::Alpha(BlendAlphaMode::Premultiplied));
-			let (output, shapes) = self.ctx.end_frame();
 			let clipped_meshes = self.ctx.tessellate(shapes);
 			for ClippedMesh(rect, mesh) in clipped_meshes {
 				graphics::set_scissor(ctx, egui_rect_to_tetra_rectangle(rect));
@@ -380,14 +412,21 @@ impl EguiWrapper {
 			}
 			graphics::reset_scissor(ctx);
 			graphics::reset_blend_mode(ctx);
-			if let Some(open_url) = &output.open_url {
-				let status =
-					open::that(&open_url.url).map_err(|error| OpenUrlError::IoError(error))?;
-				if !status.success() {
-					return Err(Error::OpenUrlError(OpenUrlError::ProcessError(status)));
-				}
+		}
+
+		// open URLs that were clicked
+		if let Some(open_url) = &output.open_url {
+			let status = open::that(&open_url.url).map_err(|error| OpenUrlError::IoError(error))?;
+			if !status.success() {
+				return Err(Error::OpenUrlError(OpenUrlError::ProcessError(status)));
 			}
 		}
+
+		// copy text to clipboard
+		if !output.copied_text.is_empty() {
+			ClipboardContext::new()?.set_contents(output.copied_text)?;
+		}
+
 		Ok(())
 	}
 }
@@ -454,7 +493,7 @@ impl<E: From<Error>> tetra::State<E> for StateWrapper<E> {
 	}
 
 	fn event(&mut self, ctx: &mut tetra::Context, event: Event) -> Result<(), E> {
-		self.egui.event(ctx, &event);
+		self.egui.event(ctx, &event)?;
 		match &event {
 			Event::KeyPressed { .. } | Event::KeyReleased { .. } => {
 				if self.egui.ctx().wants_keyboard_input() {

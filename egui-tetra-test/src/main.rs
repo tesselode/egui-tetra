@@ -6,7 +6,17 @@ use tetra::{
 	ContextBuilder, Event,
 };
 
-struct MainState;
+struct MainState {
+	text: String,
+}
+
+impl MainState {
+	fn new() -> Self {
+		Self {
+			text: String::new(),
+		}
+	}
+}
 
 impl State<Box<dyn Error>> for MainState {
 	fn draw(
@@ -18,7 +28,7 @@ impl State<Box<dyn Error>> for MainState {
 		egui::CentralPanel::default().show(egui_ctx, |ui| {
 			ui.label("This is a label");
 			ui.hyperlink("https://github.com/emilk/egui");
-			ui.text_edit_singleline(&mut "".into());
+			ui.text_edit_singleline(&mut self.text);
 			if ui.button("Click me").clicked() {}
 			ui.add(egui::Slider::new(&mut 0.0, 0.0..=100.0));
 			ui.add(egui::DragValue::new(&mut 0.0));
@@ -59,5 +69,5 @@ fn main() -> Result<(), Box<dyn Error>> {
 	ContextBuilder::new("egui-tetra-test", 800, 600)
 		.show_mouse(true)
 		.build()?
-		.run(|_| Ok(StateWrapper::new(MainState)))
+		.run(|_| Ok(StateWrapper::new(MainState::new())))
 }
