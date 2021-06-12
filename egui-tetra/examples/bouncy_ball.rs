@@ -68,7 +68,11 @@ impl MainState {
 }
 
 impl State<Box<dyn Error>> for MainState {
-	fn update(&mut self, ctx: &mut Context) -> Result<(), Box<dyn Error>> {
+	fn update(
+		&mut self,
+		ctx: &mut Context,
+		_egui_ctx: &egui::CtxRef,
+	) -> Result<(), Box<dyn Error>> {
 		if !self.moving_ball {
 			self.ball.update(ctx);
 		}
@@ -98,7 +102,12 @@ impl State<Box<dyn Error>> for MainState {
 		Ok(())
 	}
 
-	fn event(&mut self, ctx: &mut Context, event: tetra::Event) -> Result<(), Box<dyn Error>> {
+	fn event(
+		&mut self,
+		ctx: &mut Context,
+		_egui_ctx: &egui::CtxRef,
+		event: tetra::Event,
+	) -> Result<(), Box<dyn Error>> {
 		if let tetra::Event::MouseButtonPressed {
 			button: MouseButton::Left,
 		} = &event

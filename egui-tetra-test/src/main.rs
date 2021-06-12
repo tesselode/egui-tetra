@@ -57,7 +57,12 @@ impl State<Box<dyn Error>> for MainState {
 		Ok(())
 	}
 
-	fn event(&mut self, _ctx: &mut tetra::Context, event: Event) -> Result<(), Box<dyn Error>> {
+	fn event(
+		&mut self,
+		_ctx: &mut tetra::Context,
+		_egui_ctx: &egui::CtxRef,
+		event: Event,
+	) -> Result<(), Box<dyn Error>> {
 		if let Event::KeyPressed { key } = event {
 			println!("{:?}", key);
 		}

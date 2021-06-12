@@ -439,7 +439,7 @@ impl EguiWrapper {
 
 /// A trait analogous to [`tetra::State`], but with the addition of a
 /// [`ui`](State::ui) callback and an `egui_ctx` argument in the
-/// [`draw`](State::draw) function.
+/// other callbacks.
 ///
 /// You can use a type implementing this trait as your main game
 /// state by wrapping it with a [`StateWrapper`] and passing the wrapper
@@ -455,7 +455,7 @@ pub trait State<E: From<Error> = Error> {
 	}
 
 	/// Called when it is time for the game to update.
-	fn update(&mut self, ctx: &mut tetra::Context) -> Result<(), E> {
+	fn update(&mut self, ctx: &mut tetra::Context, egui_ctx: &egui::CtxRef) -> Result<(), E> {
 		Ok(())
 	}
 
@@ -468,7 +468,12 @@ pub trait State<E: From<Error> = Error> {
 	///
 	/// Mouse and keyboard input events will not be received if the GUI
 	/// is using the mouse or keyboard, respectively.
-	fn event(&mut self, ctx: &mut tetra::Context, event: Event) -> Result<(), E> {
+	fn event(
+		&mut self,
+		ctx: &mut tetra::Context,
+		egui_ctx: &egui::CtxRef,
+		event: Event,
+	) -> Result<(), E> {
 		Ok(())
 	}
 }
@@ -527,10 +532,10 @@ impl<E: From<Error>> tetra::State<E> for StateWrapper<E> {
 				}
 				_ => {}
 			}
-			self.state.event(ctx, event)?;
+			self.state.event(ctx, self.egui.ctx(), event)?;
 		}
 
-		self.state.update(ctx)
+		self.state.update(ctx, self.egui.ctx())
 	}
 
 	fn draw(&mut self, ctx: &mut tetra::Context) -> Result<(), E> {
