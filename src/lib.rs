@@ -1,3 +1,122 @@
+//! # egui-tetra
+//!
+//! egui-tetra is a library that helps integrate [egui](https://crates.io/crates/egui),
+//! an immediate mode GUI library, with [Tetra](https://crates.io/crates/tetra),
+//! a 2D game framework.
+//!
+//! ## Usage
+//!
+//! The easiest way to use egui-tetra is to make your main state struct implement
+//! egui-tetra's [`State`] trait instead of [Tetra's](tetra::State). This will
+//! give you access to a [`ui`](State::ui) callback where you can do your GUI
+//! rendering.
+//!
+//! ```
+//! use std::error::Error;
+//!
+//! struct MainState;
+//!
+//! impl egui_tetra::State<Box<dyn Error>> for MainState {
+//! 	fn ui(
+//! 		&mut self,
+//! 		ctx: &mut tetra::Context,
+//! 		egui_ctx: &egui::CtxRef,
+//! 	) -> Result<(), Box<dyn Error>> {
+//! 		egui::Window::new("hi!").show(egui_ctx, |ui| {
+//! 			ui.label("Hello world!");
+//! 		});
+//! 		Ok(())
+//! 	}
+//!
+//! 	fn update(
+//! 		&mut self,
+//! 		ctx: &mut tetra::Context,
+//! 		egui_ctx: &egui::CtxRef,
+//! 	) -> Result<(), Box<dyn Error>> {
+//!         /// Your update code here
+//! 		Ok(())
+//! 	}
+//!
+//! 	fn draw(
+//! 		&mut self,
+//! 		ctx: &mut tetra::Context,
+//! 		egui_ctx: &egui::CtxRef,
+//! 	) -> Result<(), Box<dyn Error>> {
+//!         /// Your drawing code here
+//! 		Ok(())
+//! 	}
+//!
+//! 	fn event(
+//! 		&mut self,
+//! 		ctx: &mut tetra::Context,
+//! 		egui_ctx: &egui::CtxRef,
+//! 		event: tetra::Event,
+//! 	) -> Result<(), Box<dyn Error>> {
+//!         /// Your event handling code here
+//! 		Ok(())
+//! 	}
+//! }
+//! ```
+//!
+//! When running the Tetra [`Context`](tetra::Context::run), wrap your state
+//! struct in a [`StateWrapper`] to make it compatible with Tetra's
+//! [`State` trait](tetra::State).
+//!
+//! ```no_run
+//! # use std::error::Error;
+//! #
+//! # struct MainState;
+//! #
+//! # impl egui_tetra::State<Box<dyn Error>> for MainState {
+//! # 	fn ui(
+//! # 		&mut self,
+//! # 		ctx: &mut tetra::Context,
+//! # 		egui_ctx: &egui::CtxRef,
+//! # 	) -> Result<(), Box<dyn Error>> {
+//! # 		egui::Window::new("hi!").show(egui_ctx, |ui| {
+//! # 			ui.label("Hello world!");
+//! # 		});
+//! # 		Ok(())
+//! # 	}
+//! #
+//! # 	fn update(
+//! # 		&mut self,
+//! # 		ctx: &mut tetra::Context,
+//! # 		egui_ctx: &egui::CtxRef,
+//! # 	) -> Result<(), Box<dyn Error>> {
+//! # 		Ok(())
+//! # 	}
+//! #
+//! # 	fn draw(
+//! # 		&mut self,
+//! # 		ctx: &mut tetra::Context,
+//! # 		egui_ctx: &egui::CtxRef,
+//! # 	) -> Result<(), Box<dyn Error>> {
+//! # 		Ok(())
+//! # 	}
+//! #
+//! # 	fn event(
+//! # 		&mut self,
+//! # 		ctx: &mut tetra::Context,
+//! # 		egui_ctx: &egui::CtxRef,
+//! # 		event: tetra::Event,
+//! # 	) -> Result<(), Box<dyn Error>> {
+//! # 		Ok(())
+//! # 	}
+//! # }
+//! #
+//! fn main() -> Result<(), Box<dyn Error>> {
+//! 	tetra::ContextBuilder::new("example", 800, 600)
+//! 		.build()?
+//! 		.run(|_| Ok(egui_tetra::StateWrapper::new(MainState)))
+//! }
+//! ```
+//!
+//! If you need more control, you can use [`EguiWrapper`] and manually
+//! hook up egui to Tetra's callbacks.
+
+#![warn(missing_docs)]
+
 use std::{fmt::Display, process::ExitStatus, sync::Arc, time::Instant};
 
 use copypasta::{ClipboardContext, ClipboardProvider};
@@ -172,9 +291,13 @@ fn egui_texture_to_tetra_texture(
 	)
 }
 
+/// An error that can occur when opening a URL or other path
+/// by clicking a hyperlink.
 #[derive(Debug)]
 pub enum OpenUrlError {
+	/// An error occurred when interacting with the filesystem.
 	IoError(std::io::Error),
+	/// The program that opened the link finished unsuccessfully.
 	ProcessError(ExitStatus),
 }
 
@@ -208,10 +331,15 @@ impl From<ExitStatus> for OpenUrlError {
 	}
 }
 
+/// An error that can occur when using egui-tetra.
 #[derive(Debug)]
 pub enum Error {
+	/// A Tetra error occurred.
 	TetraError(TetraError),
+	/// An error occurred when opening a URL or other path
+	/// by clicking a hyperlink.
 	OpenUrlError(OpenUrlError),
+	/// An error occurred when accessing the system's clipboard.
 	ClipboardError(Box<dyn std::error::Error>),
 }
 
@@ -254,7 +382,7 @@ impl From<Box<dyn std::error::Error + Send + Sync>> for Error {
 }
 
 /// Wraps an egui context with features that are useful
-/// for integrating egui with tetra.
+/// for integrating egui with Tetra.
 pub struct EguiWrapper {
 	raw_input: RawInput,
 	ctx: CtxRef,
@@ -280,7 +408,7 @@ impl EguiWrapper {
 		&self.ctx
 	}
 
-	/// Dispaches a tetra event to the egui context.
+	/// Dispaches a Tetra [`Event`](tetra::Event) to the egui context.
 	pub fn event(&mut self, ctx: &tetra::Context, event: &tetra::Event) -> Result<(), Error> {
 		match event {
 			tetra::Event::KeyPressed { key } => {
@@ -419,7 +547,7 @@ impl EguiWrapper {
 
 	/// Draws the latest finished GUI frame to the screen.
 	///
-	/// Note that this function changes the tetra blend mode and
+	/// Note that this function changes the Tetra blend mode and
 	/// scissor state.
 	pub fn draw_frame(&mut self, ctx: &mut tetra::Context) -> Result<(), Error> {
 		if let (Some(texture), Some(shapes)) = (&self.texture, self.shapes.take()) {
