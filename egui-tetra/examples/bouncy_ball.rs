@@ -85,6 +85,10 @@ impl State<Box<dyn Error>> for MainState {
 		egui_ctx: &egui::CtxRef,
 	) -> Result<(), Box<dyn Error>> {
 		egui::Window::new("Bouncy Ball").show(egui_ctx, |ui| {
+			ui.heading("Instructions");
+			ui.label("Click and drag to grab the ball. Release to drop it.");
+			ui.label("Clicking in this window will not affect the ball.");
+			ui.heading("Parameters");
 			ui.label("Gravity");
 			ui.add(egui::Slider::new(&mut self.ball.gravity, GRAVITY_RANGE));
 			ui.label("Bounciness");
