@@ -4,7 +4,7 @@ use copypasta::{ClipboardContext, ClipboardProvider};
 use egui::{ClippedMesh, CtxRef, RawInput};
 use tetra::{
 	graphics::{self, BlendAlphaMode, BlendMode},
-	Event, TetraError,
+	Context, Event, TetraError,
 };
 
 fn tetra_vec2_to_egui_pos2(tetra_vec2: tetra::math::Vec2<f32>) -> egui::Pos2 {
@@ -439,6 +439,10 @@ impl EguiWrapper {
 /// to [`tetra::Context::run`].
 #[allow(unused_variables)]
 pub trait State<E: From<Error> = Error> {
+	fn ui(&mut self, ctx: &mut tetra::Context, egui_ctx: &egui::CtxRef) -> Result<(), E> {
+		Ok(())
+	}
+
 	/// Called when it is time for the game to update.
 	fn update(&mut self, ctx: &mut tetra::Context) -> Result<(), E> {
 		Ok(())
@@ -467,11 +471,14 @@ pub struct StateWrapper<E: From<Error>> {
 
 impl<E: From<Error>> StateWrapper<E> {
 	/// Wraps an implementor of [`State`] so it implements [`tetra::State`].
-	pub fn new(state: impl State<E> + 'static) -> Self {
-		Self {
+	pub fn new(ctx: &mut Context, mut state: impl State<E> + 'static) -> Result<Self, E> {
+		let mut egui = EguiWrapper::new();
+		egui.begin_frame(ctx)?;
+		state.ui(ctx, egui.ctx())?;
+		Ok(Self {
 			state: Box::new(state),
-			egui: EguiWrapper::new(),
-		}
+			egui,
+		})
 	}
 
 	/// Returns a reference to this wrapper's egui context.
@@ -486,9 +493,10 @@ impl<E: From<Error>> tetra::State<E> for StateWrapper<E> {
 	}
 
 	fn draw(&mut self, ctx: &mut tetra::Context) -> Result<(), E> {
-		self.egui.begin_frame(ctx)?;
 		self.state.draw(ctx, self.egui.ctx())?;
 		self.egui.end_frame(ctx)?;
+		self.egui.begin_frame(ctx)?;
+		self.state.ui(ctx, self.egui.ctx())?;
 		Ok(())
 	}
 

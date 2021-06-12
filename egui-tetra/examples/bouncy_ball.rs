@@ -75,7 +75,11 @@ impl State<Box<dyn Error>> for MainState {
 		Ok(())
 	}
 
-	fn draw(&mut self, ctx: &mut Context, egui_ctx: &egui::CtxRef) -> Result<(), Box<dyn Error>> {
+	fn ui(
+		&mut self,
+		ctx: &mut tetra::Context,
+		egui_ctx: &egui::CtxRef,
+	) -> Result<(), Box<dyn Error>> {
 		egui::Window::new("Bouncy Ball").show(egui_ctx, |ui| {
 			ui.label("Gravity");
 			ui.add(egui::Slider::new(&mut self.ball.gravity, GRAVITY_RANGE));
@@ -85,10 +89,12 @@ impl State<Box<dyn Error>> for MainState {
 				BOUNCINESS_RANGE,
 			));
 		});
+		Ok(())
+	}
 
+	fn draw(&mut self, ctx: &mut Context, _egui_ctx: &egui::CtxRef) -> Result<(), Box<dyn Error>> {
 		tetra::graphics::clear(ctx, Color::BLACK);
 		self.ball.draw(ctx);
-
 		Ok(())
 	}
 
@@ -120,5 +126,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 	tetra::ContextBuilder::new("Bouncy ball example", SCREEN_WIDTH, SCREEN_HEIGHT)
 		.show_mouse(true)
 		.build()?
-		.run(|ctx| Ok(StateWrapper::new(MainState::new(ctx)?)))
+		.run(|ctx| {
+			let state = MainState::new(ctx)?;
+			StateWrapper::new(ctx, state)
+		})
 }
