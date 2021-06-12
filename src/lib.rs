@@ -13,6 +13,7 @@
 //!
 //! ```
 //! use std::error::Error;
+//! use egui_tetra::egui;
 //!
 //! struct MainState;
 //!
@@ -64,6 +65,7 @@
 //!
 //! ```no_run
 //! # use std::error::Error;
+//! # use egui_tetra::egui;
 //! #
 //! # struct MainState;
 //! #
@@ -116,6 +118,8 @@
 //! hook up egui to Tetra's callbacks.
 
 #![warn(missing_docs)]
+
+pub use egui;
 
 use std::{fmt::Display, process::ExitStatus, sync::Arc, time::Instant};
 
