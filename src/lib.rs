@@ -344,7 +344,7 @@ pub enum Error {
 	/// by clicking a hyperlink.
 	OpenError(OpenError),
 	/// An error occurred when accessing the system's clipboard.
-	ClipboardError(Box<dyn std::error::Error>),
+	ClipboardError(Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl Display for Error {
