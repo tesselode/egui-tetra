@@ -1,5 +1,7 @@
 # egui-tetra
 
+#### [crates.io](https://crates.io/crates/egui-tetra) | [docs](https://docs.rs/egui-tetra)
+
 egui-tetra is a library that helps integrate [egui](https://crates.io/crates/egui),
 an immediate mode GUI library, with [Tetra](https://crates.io/crates/tetra),
 a 2D game framework.
