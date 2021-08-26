@@ -122,7 +122,7 @@
 
 pub use egui;
 
-use std::{fmt::Display, process::ExitStatus, sync::Arc, time::Instant};
+use std::{fmt::Display, sync::Arc, time::Instant};
 
 use copypasta::{ClipboardContext, ClipboardProvider};
 use egui::{epaint::ClippedShape, ClippedMesh, CtxRef, RawInput};
@@ -296,46 +296,6 @@ fn egui_texture_to_tetra_texture(
 	)
 }
 
-/// An error that can occur when opening a URL or other path
-/// by clicking a hyperlink.
-#[derive(Debug)]
-pub enum OpenError {
-	/// An error occurred when interacting with the filesystem.
-	IoError(std::io::Error),
-	/// The program that opened the link finished unsuccessfully.
-	ProcessError(ExitStatus),
-}
-
-impl Display for OpenError {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		match self {
-			OpenError::IoError(error) => error.fmt(f),
-			OpenError::ProcessError(status) => status.fmt(f),
-		}
-	}
-}
-
-impl std::error::Error for OpenError {
-	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-		match self {
-			OpenError::IoError(error) => Some(error),
-			OpenError::ProcessError(_) => None,
-		}
-	}
-}
-
-impl From<std::io::Error> for OpenError {
-	fn from(error: std::io::Error) -> Self {
-		Self::IoError(error)
-	}
-}
-
-impl From<ExitStatus> for OpenError {
-	fn from(status: ExitStatus) -> Self {
-		Self::ProcessError(status)
-	}
-}
-
 /// An error that can occur when using egui-tetra.
 #[derive(Debug)]
 pub enum Error {
@@ -343,7 +303,7 @@ pub enum Error {
 	TetraError(TetraError),
 	/// An error occurred when opening a URL or other path
 	/// by clicking a hyperlink.
-	OpenError(OpenError),
+	OpenError(std::io::Error),
 	/// An error occurred when accessing the system's clipboard.
 	ClipboardError(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -374,9 +334,9 @@ impl From<TetraError> for Error {
 	}
 }
 
-impl From<OpenError> for Error {
-	fn from(error: OpenError) -> Self {
-		Self::OpenError(error)
+impl From<std::io::Error> for Error {
+	fn from(v: std::io::Error) -> Self {
+		Self::OpenError(v)
 	}
 }
 
@@ -536,10 +496,7 @@ impl EguiWrapper {
 
 		// open URLs that were clicked
 		if let Some(open_url) = &output.open_url {
-			let status = open::that(&open_url.url).map_err(OpenError::IoError)?;
-			if !status.success() {
-				return Err(Error::OpenError(OpenError::ProcessError(status)));
-			}
+			open::that(&open_url.url)?;
 		}
 
 		// copy text to clipboard
