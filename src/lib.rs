@@ -118,6 +118,7 @@
 //! hook up egui to Tetra's callbacks.
 
 #![warn(missing_docs)]
+#![allow(clippy::tabs_in_doc_comments)]
 
 pub use egui;
 
@@ -535,7 +536,7 @@ impl EguiWrapper {
 
 		// open URLs that were clicked
 		if let Some(open_url) = &output.open_url {
-			let status = open::that(&open_url.url).map_err(|error| OpenError::IoError(error))?;
+			let status = open::that(&open_url.url).map_err(OpenError::IoError)?;
 			if !status.success() {
 				return Err(Error::OpenError(OpenError::ProcessError(status)));
 			}
@@ -566,6 +567,12 @@ impl EguiWrapper {
 			graphics::reset_blend_mode(ctx);
 		}
 		Ok(())
+	}
+}
+
+impl Default for EguiWrapper {
+	fn default() -> Self {
+		Self::new()
 	}
 }
 
