@@ -601,6 +601,30 @@ impl<E: From<Error>> StateWrapper<E> {
 	}
 }
 
+/*
+A note about the order of events:
+
+Tetra's game loop is:
+- Poll and dispatch events
+- Run the update callback (may not happen every frame depending
+on the timestamp setting)
+- Run the draw callback
+
+We don't want to dispatch mouse and keyboard events to the
+gameplay code if egui wants them, but egui can't tell us if
+it wants them until after we call end_frame(). So we need
+to run the UI code at the beginning of the game loop (but
+not draw the result until the end of the game loop, of course).
+
+Here's the order of operations I settled on:
+- Whenever event is called, send it to the egui ctx and queue
+it up for later
+- At the beginning of update, run the UI callback and save the
+resulting meshes and scissor rectangles. Then, dispatch queued
+events to the gameplay code (unless the UI wanted them).
+- In the draw callback, draw gameplay first, then UI
+*/
+
 impl<E: From<Error>> tetra::State<E> for StateWrapper<E> {
 	fn update(&mut self, ctx: &mut tetra::Context) -> Result<(), E> {
 		self.egui.begin_frame(ctx)?;
