@@ -546,9 +546,6 @@ impl Default for EguiWrapper {
 #[allow(unused_variables)]
 pub trait State<E: From<Error> = Error> {
 	/// Called when it is time for the game to construct a GUI.
-	///
-	/// This is called at the beginning of the game loop, but
-	/// the GUI is not drawn until the end of the game loop.
 	fn ui(&mut self, ctx: &mut tetra::Context, egui_ctx: &egui::CtxRef) -> Result<(), E> {
 		Ok(())
 	}
