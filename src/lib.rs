@@ -125,7 +125,7 @@ pub use egui;
 use std::{fmt::Display, sync::Arc, time::Instant};
 
 use copypasta::{ClipboardContext, ClipboardProvider};
-use egui::{epaint::ClippedShape, ClippedMesh, CtxRef, RawInput};
+use egui::{ClippedMesh, CtxRef, RawInput};
 use tetra::{
 	graphics::{self, BlendAlphaMode, BlendMode},
 	Event, TetraError,
@@ -353,7 +353,7 @@ pub struct EguiWrapper {
 	ctx: CtxRef,
 	texture: Option<tetra::graphics::Texture>,
 	last_frame_time: Instant,
-	shapes: Option<Vec<ClippedShape>>,
+	meshes: Vec<(tetra::graphics::Rectangle<i32>, tetra::graphics::mesh::Mesh)>,
 }
 
 impl EguiWrapper {
@@ -364,7 +364,7 @@ impl EguiWrapper {
 			ctx: CtxRef::default(),
 			texture: None,
 			last_frame_time: Instant::now(),
-			shapes: None,
+			meshes: vec![],
 		}
 	}
 
@@ -482,6 +482,7 @@ impl EguiWrapper {
 		let now = Instant::now();
 		self.raw_input.predicted_dt = (now - self.last_frame_time).as_secs_f32();
 		self.last_frame_time = now;
+		self.meshes.clear();
 		self.ctx.begin_frame(self.raw_input.take());
 		if self.texture.is_none() {
 			self.texture = Some(egui_texture_to_tetra_texture(ctx, self.ctx.texture())?);
@@ -490,9 +491,16 @@ impl EguiWrapper {
 	}
 
 	/// Ends a GUI frame.
-	pub fn end_frame(&mut self) -> Result<(), Error> {
+	pub fn end_frame(&mut self, ctx: &mut tetra::Context) -> Result<(), Error> {
 		let (output, shapes) = self.ctx.end_frame();
-		self.shapes = Some(shapes);
+		if let Some(texture) = &self.texture {
+			let clipped_meshes = self.ctx.tessellate(shapes);
+			for ClippedMesh(rect, mesh) in clipped_meshes {
+				let rect = egui_rect_to_tetra_rectangle(rect);
+				let mesh = egui_mesh_to_tetra_mesh(ctx, mesh, texture.clone())?;
+				self.meshes.push((rect, mesh));
+			}
+		}
 
 		// open URLs that were clicked
 		if let Some(open_url) = &output.open_url {
@@ -511,19 +519,14 @@ impl EguiWrapper {
 	///
 	/// Note that this function changes the Tetra blend mode and
 	/// scissor state.
-	pub fn draw_frame(&mut self, ctx: &mut tetra::Context) -> Result<(), Error> {
-		if let (Some(texture), Some(shapes)) = (&self.texture, self.shapes.take()) {
-			graphics::set_blend_mode(ctx, BlendMode::Alpha(BlendAlphaMode::Premultiplied));
-			let clipped_meshes = self.ctx.tessellate(shapes);
-			for ClippedMesh(rect, mesh) in clipped_meshes {
-				graphics::set_scissor(ctx, egui_rect_to_tetra_rectangle(rect));
-				let mesh = egui_mesh_to_tetra_mesh(ctx, mesh, texture.clone())?;
-				mesh.draw(ctx, tetra::math::Vec2::zero());
-			}
-			graphics::reset_scissor(ctx);
-			graphics::reset_blend_mode(ctx);
+	pub fn draw_frame(&mut self, ctx: &mut tetra::Context) {
+		graphics::set_blend_mode(ctx, BlendMode::Alpha(BlendAlphaMode::Premultiplied));
+		for (rect, mesh) in &self.meshes {
+			graphics::set_scissor(ctx, *rect);
+			mesh.draw(ctx, tetra::math::Vec2::zero());
 		}
-		Ok(())
+		graphics::reset_scissor(ctx);
+		graphics::reset_blend_mode(ctx);
 	}
 }
 
@@ -602,7 +605,7 @@ impl<E: From<Error>> tetra::State<E> for StateWrapper<E> {
 	fn update(&mut self, ctx: &mut tetra::Context) -> Result<(), E> {
 		self.egui.begin_frame(ctx)?;
 		self.state.ui(ctx, self.egui.ctx())?;
-		self.egui.end_frame()?;
+		self.egui.end_frame(ctx)?;
 
 		for event in self.events.drain(..) {
 			match &event {
@@ -636,7 +639,7 @@ impl<E: From<Error>> tetra::State<E> for StateWrapper<E> {
 
 	fn draw(&mut self, ctx: &mut tetra::Context) -> Result<(), E> {
 		self.state.draw(ctx, self.egui.ctx())?;
-		self.egui.draw_frame(ctx)?;
+		self.egui.draw_frame(ctx);
 		Ok(())
 	}
 
