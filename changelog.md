@@ -1,3 +1,7 @@
+## v0.2.1 - September 18, 2021
+
+- Fix egui not receiving screen size information
+
 ## v0.2.0 - August 26, 2021
 
 ### Improvements:

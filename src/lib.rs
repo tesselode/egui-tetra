@@ -480,6 +480,13 @@ impl EguiWrapper {
 	/// Begins a new GUI frame.
 	pub fn begin_frame(&mut self, ctx: &mut tetra::Context) -> Result<(), Error> {
 		let now = Instant::now();
+		self.raw_input.screen_rect = Some(egui::Rect {
+			min: egui::pos2(0.0, 0.0),
+			max: egui::pos2(
+				tetra::window::get_width(ctx) as f32,
+				tetra::window::get_height(ctx) as f32,
+			),
+		});
 		self.raw_input.predicted_dt = (now - self.last_frame_time).as_secs_f32();
 		self.last_frame_time = now;
 		self.meshes.clear();
