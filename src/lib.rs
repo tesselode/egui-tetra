@@ -131,6 +131,9 @@ use tetra::{
 	Event, TetraError,
 };
 
+const SCROLL_SENSITIVITY: f32 = 48.0;
+const ZOOM_SENSITIVITY: f32 = 1.25;
+
 fn tetra_vec2_to_egui_pos2(tetra_vec2: tetra::math::Vec2<f32>) -> egui::Pos2 {
 	egui::pos2(tetra_vec2.x, tetra_vec2.y)
 }
@@ -273,16 +276,16 @@ fn egui_mesh_to_tetra_mesh(
 
 /// Converts an [egui font texture](egui::Texture) to a
 /// [tetra texture](tetra::graphics::Texture).
-fn egui_texture_to_tetra_texture(
+fn egui_font_image_to_tetra_texture(
 	ctx: &mut tetra::Context,
-	egui_texture: Arc<egui::Texture>,
+	egui_font_image: Arc<egui::FontImage>,
 ) -> tetra::Result<tetra::graphics::Texture> {
 	let mut pixels = vec![];
 	// each u8 of the egui texture is the alpha channel.
 	// the other components are always white. since egui
 	// uses premultiplied alpha, we set every component in the
 	// tetra texture to the alpha.
-	for alpha in &egui_texture.pixels {
+	for alpha in &egui_font_image.pixels {
 		pixels.push(*alpha);
 		pixels.push(*alpha);
 		pixels.push(*alpha);
@@ -290,8 +293,8 @@ fn egui_texture_to_tetra_texture(
 	}
 	tetra::graphics::Texture::from_rgba(
 		ctx,
-		egui_texture.width as i32,
-		egui_texture.height as i32,
+		egui_font_image.width as i32,
+		egui_font_image.height as i32,
 		&pixels,
 	)
 }
@@ -467,7 +470,17 @@ impl EguiWrapper {
 					)));
 			}
 			tetra::Event::MouseWheelMoved { amount } => {
-				self.raw_input.scroll_delta = egui::vec2(amount.x as f32, amount.y as f32);
+				if tetra::input::is_key_down(ctx, tetra::input::Key::LeftCtrl)
+					|| tetra::input::is_key_down(ctx, tetra::input::Key::RightCtrl)
+				{
+					self.raw_input
+						.events
+						.push(egui::Event::Zoom(ZOOM_SENSITIVITY.powi(amount.y)));
+				} else {
+					self.raw_input.events.push(egui::Event::Scroll(
+						egui::vec2(amount.x as f32, amount.y as f32) * SCROLL_SENSITIVITY,
+					));
+				}
 			}
 			tetra::Event::TextInput { text } => {
 				self.raw_input.events.push(egui::Event::Text(text.clone()));
@@ -492,7 +505,10 @@ impl EguiWrapper {
 		self.meshes.clear();
 		self.ctx.begin_frame(self.raw_input.take());
 		if self.texture.is_none() {
-			self.texture = Some(egui_texture_to_tetra_texture(ctx, self.ctx.texture())?);
+			self.texture = Some(egui_font_image_to_tetra_texture(
+				ctx,
+				self.ctx.font_image(),
+			)?);
 		}
 		Ok(())
 	}
