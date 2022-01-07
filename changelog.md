@@ -3,6 +3,7 @@
 - Update `egui` to 0.16.1
 - Add support for zooming
 - Increase scroll speed
+- Add FPS plot example
 
 ## v0.2.1 - September 18, 2021
 
