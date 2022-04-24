@@ -21,7 +21,7 @@
 //! 	fn ui(
 //! 		&mut self,
 //! 		ctx: &mut tetra::Context,
-//! 		egui_ctx: &egui::CtxRef,
+//! 		egui_ctx: &egui::Context,
 //! 	) -> Result<(), Box<dyn Error>> {
 //! 		egui::Window::new("hi!").show(egui_ctx, |ui| {
 //! 			ui.label("Hello world!");
@@ -32,7 +32,7 @@
 //! 	fn update(
 //! 		&mut self,
 //! 		ctx: &mut tetra::Context,
-//! 		egui_ctx: &egui::CtxRef,
+//! 		egui_ctx: &egui::Context,
 //! 	) -> Result<(), Box<dyn Error>> {
 //!         /// Your update code here
 //! 		Ok(())
@@ -41,7 +41,7 @@
 //! 	fn draw(
 //! 		&mut self,
 //! 		ctx: &mut tetra::Context,
-//! 		egui_ctx: &egui::CtxRef,
+//! 		egui_ctx: &egui::Context,
 //! 	) -> Result<(), Box<dyn Error>> {
 //!         /// Your drawing code here
 //! 		Ok(())
@@ -50,7 +50,7 @@
 //! 	fn event(
 //! 		&mut self,
 //! 		ctx: &mut tetra::Context,
-//! 		egui_ctx: &egui::CtxRef,
+//! 		egui_ctx: &egui::Context,
 //! 		event: tetra::Event,
 //! 	) -> Result<(), Box<dyn Error>> {
 //!         /// Your event handling code here
@@ -73,7 +73,7 @@
 //! # 	fn ui(
 //! # 		&mut self,
 //! # 		ctx: &mut tetra::Context,
-//! # 		egui_ctx: &egui::CtxRef,
+//! # 		egui_ctx: &egui::Context,
 //! # 	) -> Result<(), Box<dyn Error>> {
 //! # 		egui::Window::new("hi!").show(egui_ctx, |ui| {
 //! # 			ui.label("Hello world!");
@@ -84,7 +84,7 @@
 //! # 	fn update(
 //! # 		&mut self,
 //! # 		ctx: &mut tetra::Context,
-//! # 		egui_ctx: &egui::CtxRef,
+//! # 		egui_ctx: &egui::Context,
 //! # 	) -> Result<(), Box<dyn Error>> {
 //! # 		Ok(())
 //! # 	}
@@ -92,7 +92,7 @@
 //! # 	fn draw(
 //! # 		&mut self,
 //! # 		ctx: &mut tetra::Context,
-//! # 		egui_ctx: &egui::CtxRef,
+//! # 		egui_ctx: &egui::Context,
 //! # 	) -> Result<(), Box<dyn Error>> {
 //! # 		Ok(())
 //! # 	}
@@ -100,7 +100,7 @@
 //! # 	fn event(
 //! # 		&mut self,
 //! # 		ctx: &mut tetra::Context,
-//! # 		egui_ctx: &egui::CtxRef,
+//! # 		egui_ctx: &egui::Context,
 //! # 		event: tetra::Event,
 //! # 	) -> Result<(), Box<dyn Error>> {
 //! # 		Ok(())
@@ -125,7 +125,7 @@ pub use egui;
 use std::{fmt::Display, sync::Arc, time::Instant};
 
 use copypasta::{ClipboardContext, ClipboardProvider};
-use egui::{ClippedMesh, CtxRef, RawInput};
+use egui::{AlphaImage, ClippedMesh, Context, ImageData, RawInput};
 use tetra::{
 	graphics::{self, BlendState},
 	Event, TetraError,
@@ -278,7 +278,7 @@ fn egui_mesh_to_tetra_mesh(
 /// [tetra texture](tetra::graphics::Texture).
 fn egui_font_image_to_tetra_texture(
 	ctx: &mut tetra::Context,
-	egui_font_image: Arc<egui::FontImage>,
+	egui_font_image: AlphaImage,
 ) -> tetra::Result<tetra::graphics::Texture> {
 	let mut pixels = vec![];
 	// each u8 of the egui texture is the alpha channel.
@@ -293,8 +293,8 @@ fn egui_font_image_to_tetra_texture(
 	}
 	tetra::graphics::Texture::from_data(
 		ctx,
-		egui_font_image.width as i32,
-		egui_font_image.height as i32,
+		egui_font_image.width() as i32,
+		egui_font_image.height() as i32,
 		graphics::TextureFormat::Rgba8,
 		&pixels,
 	)
@@ -354,7 +354,7 @@ impl From<Box<dyn std::error::Error + Send + Sync>> for Error {
 /// for integrating egui with Tetra.
 pub struct EguiWrapper {
 	raw_input: RawInput,
-	ctx: CtxRef,
+	ctx: Context,
 	texture: Option<tetra::graphics::Texture>,
 	last_frame_time: Instant,
 	meshes: Vec<(tetra::graphics::Rectangle<i32>, tetra::graphics::mesh::Mesh)>,
@@ -365,7 +365,7 @@ impl EguiWrapper {
 	pub fn new() -> Self {
 		Self {
 			raw_input: RawInput::default(),
-			ctx: CtxRef::default(),
+			ctx: Context::default(),
 			texture: None,
 			last_frame_time: Instant::now(),
 			meshes: vec![],
@@ -373,7 +373,7 @@ impl EguiWrapper {
 	}
 
 	/// Returns a reference to the underlying egui context.
-	pub fn ctx(&self) -> &egui::CtxRef {
+	pub fn ctx(&self) -> &egui::Context {
 		&self.ctx
 	}
 
@@ -506,19 +506,18 @@ impl EguiWrapper {
 		self.meshes.clear();
 		self.ctx.begin_frame(self.raw_input.take());
 		if self.texture.is_none() {
-			self.texture = Some(egui_font_image_to_tetra_texture(
-				ctx,
-				self.ctx.font_image(),
-			)?);
+			if let ImageData::Alpha(img) = self.ctx.fonts().font_image_delta().unwrap().image {
+				self.texture = Some(egui_font_image_to_tetra_texture(ctx, img)?);
+			}
 		}
 		Ok(())
 	}
 
 	/// Ends a GUI frame.
 	pub fn end_frame(&mut self, ctx: &mut tetra::Context) -> Result<(), Error> {
-		let (output, shapes) = self.ctx.end_frame();
+		let output = self.ctx.end_frame();
 		if let Some(texture) = &self.texture {
-			let clipped_meshes = self.ctx.tessellate(shapes);
+			let clipped_meshes = self.ctx.tessellate(output.shapes);
 			for ClippedMesh(rect, mesh) in clipped_meshes {
 				let rect = egui_rect_to_tetra_rectangle(rect);
 				let mesh = egui_mesh_to_tetra_mesh(ctx, mesh, texture.clone())?;
@@ -527,13 +526,13 @@ impl EguiWrapper {
 		}
 
 		// open URLs that were clicked
-		if let Some(open_url) = &output.open_url {
+		if let Some(open_url) = &output.platform_output.open_url {
 			open::that(&open_url.url)?;
 		}
 
 		// copy text to clipboard
-		if !output.copied_text.is_empty() {
-			ClipboardContext::new()?.set_contents(output.copied_text)?;
+		if !output.platform_output.copied_text.is_empty() {
+			ClipboardContext::new()?.set_contents(output.platform_output.copied_text)?;
 		}
 
 		Ok(())
@@ -570,17 +569,17 @@ impl Default for EguiWrapper {
 #[allow(unused_variables)]
 pub trait State<E: From<Error> = Error> {
 	/// Called when it is time for the game to construct a GUI.
-	fn ui(&mut self, ctx: &mut tetra::Context, egui_ctx: &egui::CtxRef) -> Result<(), E> {
+	fn ui(&mut self, ctx: &mut tetra::Context, egui_ctx: &egui::Context) -> Result<(), E> {
 		Ok(())
 	}
 
 	/// Called when it is time for the game to update.
-	fn update(&mut self, ctx: &mut tetra::Context, egui_ctx: &egui::CtxRef) -> Result<(), E> {
+	fn update(&mut self, ctx: &mut tetra::Context, egui_ctx: &egui::Context) -> Result<(), E> {
 		Ok(())
 	}
 
 	/// Called when it is time for the game to be drawn.
-	fn draw(&mut self, ctx: &mut tetra::Context, egui_ctx: &egui::CtxRef) -> Result<(), E> {
+	fn draw(&mut self, ctx: &mut tetra::Context, egui_ctx: &egui::Context) -> Result<(), E> {
 		Ok(())
 	}
 
@@ -591,7 +590,7 @@ pub trait State<E: From<Error> = Error> {
 	fn event(
 		&mut self,
 		ctx: &mut tetra::Context,
-		egui_ctx: &egui::CtxRef,
+		egui_ctx: &egui::Context,
 		event: Event,
 	) -> Result<(), E> {
 		Ok(())
@@ -617,7 +616,7 @@ impl<E: From<Error>> StateWrapper<E> {
 	}
 
 	/// Returns a reference to this wrapper's egui context.
-	pub fn ctx(&self) -> &egui::CtxRef {
+	pub fn ctx(&self) -> &egui::Context {
 		self.egui.ctx()
 	}
 }
