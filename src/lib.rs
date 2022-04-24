@@ -127,7 +127,7 @@ use std::{fmt::Display, sync::Arc, time::Instant};
 use copypasta::{ClipboardContext, ClipboardProvider};
 use egui::{ClippedMesh, CtxRef, RawInput};
 use tetra::{
-	graphics::{self, BlendAlphaMode, BlendMode},
+	graphics::{self, BlendState},
 	Event, TetraError,
 };
 
@@ -291,10 +291,11 @@ fn egui_font_image_to_tetra_texture(
 		pixels.push(*alpha);
 		pixels.push(*alpha);
 	}
-	tetra::graphics::Texture::from_rgba(
+	tetra::graphics::Texture::from_data(
 		ctx,
 		egui_font_image.width as i32,
 		egui_font_image.height as i32,
+		graphics::TextureFormat::Rgba8,
 		&pixels,
 	)
 }
@@ -543,13 +544,13 @@ impl EguiWrapper {
 	/// Note that this function changes the Tetra blend mode and
 	/// scissor state.
 	pub fn draw_frame(&mut self, ctx: &mut tetra::Context) {
-		graphics::set_blend_mode(ctx, BlendMode::Alpha(BlendAlphaMode::Premultiplied));
+		graphics::set_blend_state(ctx, BlendState::alpha(true));
 		for (rect, mesh) in &self.meshes {
 			graphics::set_scissor(ctx, *rect);
 			mesh.draw(ctx, tetra::math::Vec2::zero());
 		}
 		graphics::reset_scissor(ctx);
-		graphics::reset_blend_mode(ctx);
+		graphics::reset_blend_state(ctx);
 	}
 }
 
