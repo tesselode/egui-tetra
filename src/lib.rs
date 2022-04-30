@@ -125,7 +125,8 @@ pub use egui;
 use std::{fmt::Display, sync::Arc, time::Instant};
 
 use copypasta::{ClipboardContext, ClipboardProvider};
-use egui::{AlphaImage, ClippedMesh, Context, ImageData, RawInput};
+use egui::{FontImage, Context, ImageData, RawInput};
+use egui::epaint::Primitive;
 use tetra::{
 	graphics::{self, BlendState},
 	Event, TetraError,
@@ -278,7 +279,7 @@ fn egui_mesh_to_tetra_mesh(
 /// [tetra texture](tetra::graphics::Texture).
 fn egui_font_image_to_tetra_texture(
 	ctx: &mut tetra::Context,
-	egui_font_image: AlphaImage,
+	egui_font_image: FontImage,
 ) -> tetra::Result<tetra::graphics::Texture> {
 	let mut pixels = vec![];
 	// each u8 of the egui texture is the alpha channel.
@@ -286,17 +287,18 @@ fn egui_font_image_to_tetra_texture(
 	// uses premultiplied alpha, we set every component in the
 	// tetra texture to the alpha.
 	for alpha in &egui_font_image.pixels {
-		pixels.push(*alpha);
-		pixels.push(*alpha);
-		pixels.push(*alpha);
-		pixels.push(*alpha);
+		let alpha = (alpha * 255.0) as u8;
+		pixels.push(alpha);
+		pixels.push(alpha);
+		pixels.push(alpha);
+		pixels.push(alpha);
 	}
 	tetra::graphics::Texture::from_data(
 		ctx,
 		egui_font_image.width() as i32,
 		egui_font_image.height() as i32,
 		graphics::TextureFormat::Rgba8,
-		&pixels,
+		pixels.as_slice(),
 	)
 }
 
@@ -506,7 +508,7 @@ impl EguiWrapper {
 		self.meshes.clear();
 		self.ctx.begin_frame(self.raw_input.take());
 		if self.texture.is_none() {
-			if let ImageData::Alpha(img) = self.ctx.fonts().font_image_delta().unwrap().image {
+			if let ImageData::Font(img) = self.ctx.fonts().font_image_delta().unwrap().image {
 				self.texture = Some(egui_font_image_to_tetra_texture(ctx, img)?);
 			}
 		}
@@ -517,11 +519,13 @@ impl EguiWrapper {
 	pub fn end_frame(&mut self, ctx: &mut tetra::Context) -> Result<(), Error> {
 		let output = self.ctx.end_frame();
 		if let Some(texture) = &self.texture {
-			let clipped_meshes = self.ctx.tessellate(output.shapes);
-			for ClippedMesh(rect, mesh) in clipped_meshes {
-				let rect = egui_rect_to_tetra_rectangle(rect);
-				let mesh = egui_mesh_to_tetra_mesh(ctx, mesh, texture.clone())?;
-				self.meshes.push((rect, mesh));
+			let clips = self.ctx.tessellate(output.shapes);
+			for clip in clips {
+				let rect = egui_rect_to_tetra_rectangle(clip.clip_rect);
+				if let Primitive::Mesh(mesh) = clip.primitive {
+					let mesh = egui_mesh_to_tetra_mesh(ctx, mesh, texture.clone())?;
+					self.meshes.push((rect, mesh));
+				}
 			}
 		}
 
