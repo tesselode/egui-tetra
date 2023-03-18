@@ -1,3 +1,5 @@
+**Note:** this library is no longer maintained, as Tetra is no longer being actively developed.
+
 # egui-tetra
 
 #### [crates.io](https://crates.io/crates/egui-tetra) | [docs](https://docs.rs/egui-tetra)
