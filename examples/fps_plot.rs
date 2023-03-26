@@ -22,7 +22,7 @@ impl State<Box<dyn Error>> for MainState {
 	fn update(
 		&mut self,
 		ctx: &mut Context,
-		_egui_ctx: &egui::CtxRef,
+		_egui_ctx: &egui::Context,
 	) -> Result<(), Box<dyn Error>> {
 		self.fps_measurements.push_back(tetra::time::get_fps(ctx));
 		if self.fps_measurements.len() > MAX_FPS_MEASUREMENTS {
@@ -31,7 +31,7 @@ impl State<Box<dyn Error>> for MainState {
 		Ok(())
 	}
 
-	fn ui(&mut self, _ctx: &mut Context, egui_ctx: &egui::CtxRef) -> Result<(), Box<dyn Error>> {
+	fn ui(&mut self, _ctx: &mut Context, egui_ctx: &egui::Context) -> Result<(), Box<dyn Error>> {
 		egui::CentralPanel::default().show(egui_ctx, |ui| {
 			Plot::new("fps").include_y(0.0).show(ui, |ui| {
 				ui.line(Line::new(Values::from_values_iter(

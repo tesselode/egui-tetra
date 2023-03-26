@@ -71,7 +71,7 @@ impl State<Box<dyn Error>> for MainState {
 	fn update(
 		&mut self,
 		ctx: &mut Context,
-		_egui_ctx: &egui::CtxRef,
+		_egui_ctx: &egui::Context,
 	) -> Result<(), Box<dyn Error>> {
 		if !self.moving_ball {
 			self.ball.update(ctx);
@@ -82,7 +82,7 @@ impl State<Box<dyn Error>> for MainState {
 	fn ui(
 		&mut self,
 		_ctx: &mut tetra::Context,
-		egui_ctx: &egui::CtxRef,
+		egui_ctx: &egui::Context,
 	) -> Result<(), Box<dyn Error>> {
 		egui::Window::new("Bouncy Ball").show(egui_ctx, |ui| {
 			ui.heading("Instructions");
@@ -100,7 +100,7 @@ impl State<Box<dyn Error>> for MainState {
 		Ok(())
 	}
 
-	fn draw(&mut self, ctx: &mut Context, _egui_ctx: &egui::CtxRef) -> Result<(), Box<dyn Error>> {
+	fn draw(&mut self, ctx: &mut Context, _egui_ctx: &egui::Context) -> Result<(), Box<dyn Error>> {
 		tetra::graphics::clear(ctx, Color::BLACK);
 		self.ball.draw(ctx);
 		Ok(())
@@ -109,7 +109,7 @@ impl State<Box<dyn Error>> for MainState {
 	fn event(
 		&mut self,
 		ctx: &mut Context,
-		_egui_ctx: &egui::CtxRef,
+		_egui_ctx: &egui::Context,
 		event: tetra::Event,
 	) -> Result<(), Box<dyn Error>> {
 		if let tetra::Event::MouseButtonPressed {
